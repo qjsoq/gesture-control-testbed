@@ -1,0 +1,20 @@
+version: 1
+
+source:
+  type: image
+  path: /home/pi/green-thing/images/image.png
+  hold: false
+
+recognizer:
+  type: onnx_yolo
+  model_path: /home/pi/best.onnx
+  confidence: 0.25
+  iou: 0.45
+  imgsz: 640
+
+runtime:
+  log_level: INFO
+  log_fps_every: 0
+  display: false
+  output_path: /home/pi/green-thing/images/image_annotated.png
+  max_frames: 1

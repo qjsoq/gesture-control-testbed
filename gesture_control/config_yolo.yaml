@@ -1,0 +1,19 @@
+version: 1
+
+source:
+  type: webcam
+  device_index: 0
+  resolution: [1280, 720]
+
+recognizer:
+  type: yolo
+  model_path: D:/Downloads/best.pt
+  confidence: 0.40
+  iou: 0.45
+  imgsz: 640
+  device: cpu
+
+runtime:
+  log_level: INFO
+  log_fps_every: 60
+  display: true

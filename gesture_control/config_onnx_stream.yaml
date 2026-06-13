@@ -1,0 +1,19 @@
+version: 1
+
+recognizer:
+  type: onnx_yolo
+  model_path: /home/pi/best320.onnx
+  confidence: 0.55
+  iou: 0.45
+  imgsz: 320
+
+camera:
+  width: 640
+  height: 480
+  framerate: 15
+  codec: mjpeg
+
+server:
+  host: 0.0.0.0
+  port: 8000
+  jpeg_quality: 75

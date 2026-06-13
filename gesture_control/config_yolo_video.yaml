@@ -1,0 +1,20 @@
+version: 1
+
+source:
+  type: file
+  path: D:/green-thing/video-client/half_duplex_transmit/test.mp4
+  loop: true
+  realtime: true
+
+recognizer:
+  type: yolo
+  model_path: D:/Downloads/best.pt
+  confidence: 0.40
+  iou: 0.45
+  imgsz: 640
+  device: cpu
+
+runtime:
+  log_level: INFO
+  log_fps_every: 60
+  display: true

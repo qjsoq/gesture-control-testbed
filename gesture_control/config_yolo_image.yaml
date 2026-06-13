@@ -1,0 +1,19 @@
+version: 1
+
+source:
+  type: image
+  # Постав сюди шлях до своєї фотографії
+  path: D:\green-thing\images\image.png
+
+recognizer:
+  type: yolo
+  model_path: D:/Downloads/best.pt
+  confidence: 0.25
+  iou: 0.45
+  imgsz: 640
+  device: cpu
+
+runtime:
+  log_level: INFO
+  log_fps_every: 0
+  display: true
