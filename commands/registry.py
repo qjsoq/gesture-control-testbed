@@ -21,8 +21,10 @@ class CommandRegistry:
         # Спільний стан ноду: `like` нодне раз і тримає, `no_gesture` повертає
         # в нейтраль і знову озброює (re-arm).
         nod_state = VerticalNodState()
+        follow_palm = FollowPalmCommand(v_servo, h_servo)
         return {
-            "palm": FollowPalmCommand(v_servo, h_servo),
+            "palm": follow_palm,
+            "open": follow_palm,   # MediaPipe rule_based: розкрита долоня = стеження
             "like": ThumbsUpCommand(v_servo, nod_state),
             "no_gesture": ReturnNeutralCommand(v_servo, nod_state),
         }
