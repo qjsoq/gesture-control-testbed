@@ -1,0 +1,32 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+
+# Virtual envs
+.venv/
+venv/
+*_env/
+env/
+
+# Tooling / local
+.claude/
+
+# Secrets / temp (Pi password hash + brute scripts — NEVER commit)
+_hash.txt
+_brute*.py
+
+# Large media / artifacts
+*.mp4
+_fig_*.png
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Legacy / reference dumps — not needed on Pi
+video-client/
+opencv-course/
+*.pt
+*.tar.gz

@@ -8,6 +8,7 @@ from pydantic import BaseModel, Field
 import numpy as np
 
 from gesture_control.sources.generic_source_config import SourceConfig
+from gesture_control.sources.registry import register_source
 logger = logging.getLogger(__name__)
 
 
@@ -53,3 +54,7 @@ class WebcamSource:
                 return
             yield image
             self._index += 1
+
+
+# WebcamConfig визначено до WebcamSource, тож реєструємо явно тут (Д4: webcam -> VideoSource).
+register_source("webcam", WebcamSource)(WebcamConfig)

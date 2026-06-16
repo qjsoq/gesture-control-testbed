@@ -5,6 +5,7 @@ from pathlib import Path
 from types import TracebackType
 from typing import Iterator, Literal
 from gesture_control.sources.generic_source_config import SourceConfig
+from gesture_control.sources.registry import register_source
 
 import cv2
 from pydantic import BaseModel, Field
@@ -60,3 +61,7 @@ class FileSource:
                 dt = time.monotonic() - t0
                 if dt < period:
                     time.sleep(period - dt)
+
+
+# FileSourceConfig визначено до FileSource, тож реєструємо явно тут.
+register_source("file", FileSource)(FileSourceConfig)

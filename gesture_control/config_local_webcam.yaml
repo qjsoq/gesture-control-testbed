@@ -1,0 +1,18 @@
+version: 1
+mode: local
+
+# Веб-камера + дворівневий розпізнавач (MediaPipe Hands -> правила).
+# Дев-шлях: жести з USB-камери керують гімбалом без Pi-камери/ONNX.
+source:
+  type: webcam
+  device_index: 0
+
+recognizer:
+  type: two_stage
+  extractor:
+    type: mediapipe_hands
+    max_hands: 1
+    min_detection_confidence: 0.6
+    min_tracking_confidence: 0.5
+  classifier:
+    type: rule_based

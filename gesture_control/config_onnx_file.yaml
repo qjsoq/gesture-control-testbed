@@ -1,0 +1,21 @@
+version: 1
+mode: stream
+
+recognizer:
+  type: onnx_yolo
+  model_path: /home/pi/best320.onnx
+  confidence: 0.55
+  iou: 0.45
+  imgsz: 320
+
+# Джерело — відеофайл замість камери (тест без CSI-камери).
+source:
+  type: file
+  path: /home/pi/video.mp4
+  loop: true        # зациклити відео
+  realtime: true    # відтворювати в темпі fps файлу
+
+server:
+  host: 0.0.0.0
+  port: 8000
+  jpeg_quality: 75
