@@ -1,0 +1,11 @@
+# PC-сторона (pc_inference_server.py) — другий класифікатор: MediaPipe Hands
+# (21 точка) -> правила. Потрібен лише блок recognizer.
+recognizer:
+  type: two_stage
+  extractor:
+    type: mediapipe_hands
+    max_hands: 1
+    min_detection_confidence: 0.6
+    min_tracking_confidence: 0.5
+  classifier:
+    type: rule_based

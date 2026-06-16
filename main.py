@@ -50,7 +50,12 @@ from commands.follow_palm import (  # noqa: E402
 from gesture_control.recognizers import RecognizerConfig, RecognizerFactory  # noqa: E402
 from gesture_control.recognizers.generic_recognizer import GestureRecognizer  # noqa: E402
 from gesture_control.sources import SourceConfig, build_source, get_source_config  # noqa: E402
-from gesture_source import GestureSource, LocalRecognizerSource, TcpLabelSource  # noqa: E402
+from gesture_source import (  # noqa: E402
+    GestureSource,
+    LocalRecognizerSource,
+    RemoteInferenceSource,
+    TcpLabelSource,
+)
 from servo_factory import ServoFactory  # noqa: E402
 
 logger = logging.getLogger(__name__)
@@ -84,13 +89,21 @@ class TcpConfig(BaseModel):
     port: int = 15482
 
 
+class RemoteConfig(BaseModel):
+    """Куди Pi під'єднується для віддаленого інференсу (PC = сервер)."""
+
+    host: str = "127.0.0.1"   # IP комп'ютера з pc_inference_server.py
+    port: int = 15483
+
+
 class MainConfig(BaseModel):
-    mode: Literal["stream", "local", "tcp"] = "stream"
+    mode: Literal["stream", "local", "tcp", "remote"] = "stream"
     recognizer: RecognizerConfig | None = None
     source: SourceConfig | None = None
     camera: CameraConfig = CameraConfig()
     server: ServerConfig = ServerConfig()
     tcp: TcpConfig = TcpConfig()
+    remote: RemoteConfig = RemoteConfig()
 
     @model_validator(mode="before")
     @classmethod
@@ -278,6 +291,8 @@ class Main:
             self._run_local()
         elif self._cfg.mode == "tcp":
             self._run_tcp()
+        elif self._cfg.mode == "remote":
+            self._run_remote()
         else:  # pragma: no cover — pydantic уже валідує
             raise SystemExit(f"unknown mode: {self._cfg.mode}")
 
@@ -444,6 +459,29 @@ class Main:
         finally:
             self.dispatcher.stop()
 
+    # --- режим remote (Pi шле кадри на PC, отримує мітки) ----------------- #
+    def _run_remote(self) -> None:
+        if self._cfg.source is None:
+            raise SystemExit("remote mode requires a `source` in the config")
+        self._install_signal_handlers()
+        video = build_source(self._cfg.source)
+        logger.info(
+            "remote mode: streaming frames to PC %s:%d",
+            self._cfg.remote.host, self._cfg.remote.port,
+        )
+        self.source = RemoteInferenceSource(
+            video,
+            self._cfg.remote.host,
+            self._cfg.remote.port,
+            jpeg_quality=self._cfg.server.jpeg_quality,
+            stop=self._stop,
+        )
+        try:
+            self._consume(self.source)
+        finally:
+            self.dispatcher.stop()
+            logger.info("remote source stopped")
+
     # --- спільне -------------------------------------------------------- #
     def _consume(self, source: GestureSource) -> None:
         for ev in source:
@@ -476,7 +514,7 @@ def main(argv: list[str] | None = None) -> None:
     )
     parser.add_argument(
         "--mode",
-        choices=["stream", "local", "tcp"],
+        choices=["stream", "local", "tcp", "remote"],
         default=None,
         help="override the config's mode",
     )
