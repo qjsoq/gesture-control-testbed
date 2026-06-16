@@ -7,5 +7,6 @@ recognizer:
     max_hands: 1
     min_detection_confidence: 0.6
     min_tracking_confidence: 0.5
+    model_path: D:/Downloads/hand_landmarker.task   # <-- шлях до .task на ПК
   classifier:
     type: rule_based
