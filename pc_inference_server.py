@@ -2,9 +2,11 @@
 
 Слухає TCP, приймає JPEG-кадри з Pi (`RemoteInferenceSource`), проганяє
 обраний у YAML розпізнавач (напр. MediaPipe two-stage) і повертає мітку жесту.
+За бажанням віддає анотований MJPEG у браузер (--view-port, типово 8000).
 
     PC:  python pc_inference_server.py --config gesture_control/config_mediapipe_server.yaml --port 15483
     Pi:  PYTHONPATH=. python3 main.py --config gesture_control/config_remote_pi.yaml
+    Браузер: http://localhost:8000/
 
 Протокол (симетричний із `gesture_source.RemoteInferenceSource`):
     Pi -> PC : b"<jpeg_len>\\n" + <jpeg>
@@ -15,11 +17,15 @@ from __future__ import annotations
 import argparse
 import json
 import logging
-import socket
+import socketserver
+import threading
+from http import server as http_server
 from pathlib import Path
+from threading import Condition
 
 import cv2
 import numpy as np
+import socket
 import yaml
 from pydantic import BaseModel
 
@@ -39,9 +45,86 @@ def _load_recognizer(path: Path):
     return RecognizerFactory.build_recognizer(cfg.recognizer)
 
 
+# --------------------------------------------------------------------------- #
+# MJPEG-стрім у браузер (анотовані кадри)
+# --------------------------------------------------------------------------- #
+class _StreamingOutput:
+    def __init__(self) -> None:
+        self.frame: bytes | None = None
+        self.condition = Condition()
+
+    def write(self, buf: bytes) -> None:
+        with self.condition:
+            self.frame = buf
+            self.condition.notify_all()
+
+
+def _make_handler(output: _StreamingOutput):
+    class Handler(http_server.BaseHTTPRequestHandler):
+        def log_message(self, *_a) -> None:
+            return
+
+        def do_GET(self) -> None:
+            if self.path == "/":
+                self.send_response(200)
+                self.send_header("Content-Type", "text/html")
+                self.end_headers()
+                self.wfile.write(
+                    b'<html><head><title>MediaPipe (remote)</title></head>'
+                    b'<body style="margin:0;background:#000;">'
+                    b'<img src="/stream.mjpg" style="width:100%;height:100vh;object-fit:contain;"/>'
+                    b'</body></html>'
+                )
+            elif self.path == "/stream.mjpg":
+                self.send_response(200)
+                self.send_header("Cache-Control", "no-cache, private")
+                self.send_header(
+                    "Content-Type", "multipart/x-mixed-replace; boundary=FRAME"
+                )
+                self.end_headers()
+                try:
+                    while True:
+                        with output.condition:
+                            output.condition.wait()
+                            frame = output.frame
+                        if frame is None:
+                            continue
+                        self.wfile.write(b"--FRAME\r\n")
+                        self.send_header("Content-Type", "image/jpeg")
+                        self.send_header("Content-Length", str(len(frame)))
+                        self.end_headers()
+                        self.wfile.write(frame)
+                        self.wfile.write(b"\r\n")
+                except (BrokenPipeError, ConnectionResetError):
+                    pass
+            else:
+                self.send_error(404)
+
+    return Handler
+
+
+class _ThreadingServer(socketserver.ThreadingMixIn, http_server.HTTPServer):
+    allow_reuse_address = True
+    daemon_threads = True
+
+
+def _annotate(img: np.ndarray, label: str, x: float | None, y: float | None) -> None:
+    cv2.putText(
+        img, f"mediapipe: {label}", (10, 28),
+        cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 255, 255), 2, cv2.LINE_AA,
+    )
+    if x is not None and y is not None:
+        h, w = img.shape[:2]
+        cv2.drawMarker(
+            img, (int(x * w), int(y * h)), (0, 255, 0),
+            markerType=cv2.MARKER_CROSS, markerSize=28, thickness=2,
+        )
+
+
+# --------------------------------------------------------------------------- #
+# TCP-приймач кадрів
+# --------------------------------------------------------------------------- #
 def _recv_frame(conn: socket.socket, buffer: bytes) -> tuple[bytes | None, bytes]:
-    """Читає одне повідомлення `<len>\\n<bytes>`; повертає (jpeg_bytes, buffer)
-    або (None, buffer) на закритті/помилці."""
     while b"\n" not in buffer:
         chunk = conn.recv(65536)
         if not chunk:
@@ -61,7 +144,7 @@ def _recv_frame(conn: socket.socket, buffer: bytes) -> tuple[bytes | None, bytes
     return rest[:size], rest[size:]
 
 
-def _serve_one(conn: socket.socket, recognizer) -> None:
+def _serve_one(conn: socket.socket, recognizer, output: _StreamingOutput | None) -> None:
     buffer = b""
     frames = 0
     while True:
@@ -80,6 +163,13 @@ def _serve_one(conn: socket.socket, recognizer) -> None:
                 label, x, y = pred.label, pred.hand_x, pred.hand_y
         payload = json.dumps({"label": label, "x": x, "y": y}).encode("utf-8")
         conn.sendall(f"{len(payload)}\n".encode("ascii") + payload)
+
+        if output is not None and img is not None:
+            _annotate(img, label, x, y)
+            ok, enc = cv2.imencode(".jpg", img, [cv2.IMWRITE_JPEG_QUALITY, 80])
+            if ok:
+                output.write(enc.tobytes())
+
         frames += 1
         if frames % 30 == 0:
             logger.info("served %d frames, last label=%s", frames, label)
@@ -94,10 +184,22 @@ def main(argv: list[str] | None = None) -> None:
     parser.add_argument("--config", type=Path, required=True)
     parser.add_argument("--host", default="0.0.0.0")
     parser.add_argument("--port", type=int, default=15483)
+    parser.add_argument(
+        "--view-port", type=int, default=8000,
+        help="MJPEG-перегляд анотованих кадрів у браузері; 0 = вимкнути",
+    )
     args = parser.parse_args(argv)
 
     recognizer = _load_recognizer(args.config)
     logger.info("recognizer ready: %s", type(recognizer).__name__)
+
+    output: _StreamingOutput | None = None
+    if args.view_port > 0:
+        output = _StreamingOutput()
+        handler = _make_handler(output)
+        httpd = _ThreadingServer((args.host, args.view_port), handler)
+        threading.Thread(target=httpd.serve_forever, daemon=True).start()
+        logger.info("MJPEG view on http://localhost:%d/", args.view_port)
 
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as srv:
         srv.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
@@ -109,7 +211,7 @@ def main(argv: list[str] | None = None) -> None:
                 conn, addr = srv.accept()
                 logger.info("Pi connected from %s", addr)
                 with conn:
-                    _serve_one(conn, recognizer)
+                    _serve_one(conn, recognizer, output)
                 logger.info("Pi disconnected, waiting for a new connection")
         except KeyboardInterrupt:
             logger.info("interrupted, shutting down")
