@@ -51,7 +51,7 @@ class RuleBasedClassifier:
             confidence=1.0 if label != "unknown" else 0.0,
             hand_x=float(center[0]),
             hand_y=float(center[1]),
-            raw={"extended_fingers": n},
+            raw={"extended_fingers": n, "landmarks": landmarks},
         )
 
     @staticmethod

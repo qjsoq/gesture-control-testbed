@@ -108,7 +108,35 @@ class _ThreadingServer(socketserver.ThreadingMixIn, http_server.HTTPServer):
     daemon_threads = True
 
 
-def _annotate(img: np.ndarray, label: str, x: float | None, y: float | None) -> None:
+# Стандартні зв'язки 21-точкового скелета кисті MediaPipe.
+_HAND_CONNECTIONS = (
+    (0, 1), (1, 2), (2, 3), (3, 4),            # великий палець
+    (0, 5), (5, 6), (6, 7), (7, 8),            # вказівний
+    (5, 9), (9, 10), (10, 11), (11, 12),       # середній
+    (9, 13), (13, 14), (14, 15), (15, 16),     # безіменний
+    (13, 17), (17, 18), (18, 19), (19, 20),    # мізинець
+    (0, 17),                                   # основа долоні
+)
+
+
+def _draw_landmarks(img: np.ndarray, landmarks: np.ndarray) -> None:
+    h, w = img.shape[:2]
+    pts = [(int(p[0] * w), int(p[1] * h)) for p in landmarks]
+    for a, b in _HAND_CONNECTIONS:
+        cv2.line(img, pts[a], pts[b], (255, 200, 0), 2, cv2.LINE_AA)
+    for px, py in pts:
+        cv2.circle(img, (px, py), 4, (0, 0, 255), -1, cv2.LINE_AA)
+
+
+def _annotate(
+    img: np.ndarray,
+    label: str,
+    x: float | None,
+    y: float | None,
+    landmarks: np.ndarray | None = None,
+) -> None:
+    if landmarks is not None and getattr(landmarks, "shape", None) == (21, 3):
+        _draw_landmarks(img, landmarks)
     cv2.putText(
         img, f"mediapipe: {label}", (10, 28),
         cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 255, 255), 2, cv2.LINE_AA,
@@ -153,6 +181,7 @@ def _serve_one(conn: socket.socket, recognizer, output: _StreamingOutput | None)
             return
         img = cv2.imdecode(np.frombuffer(jpg, dtype=np.uint8), cv2.IMREAD_COLOR)
         label, x, y = "no_gesture", None, None
+        landmarks = None
         if img is not None:
             try:
                 pred = recognizer.predict(img)
@@ -161,11 +190,12 @@ def _serve_one(conn: socket.socket, recognizer, output: _StreamingOutput | None)
                 pred = None
             if pred is not None:
                 label, x, y = pred.label, pred.hand_x, pred.hand_y
+                landmarks = pred.raw.get("landmarks")
         payload = json.dumps({"label": label, "x": x, "y": y}).encode("utf-8")
         conn.sendall(f"{len(payload)}\n".encode("ascii") + payload)
 
         if output is not None and img is not None:
-            _annotate(img, label, x, y)
+            _annotate(img, label, x, y, landmarks)
             ok, enc = cv2.imencode(".jpg", img, [cv2.IMWRITE_JPEG_QUALITY, 80])
             if ok:
                 output.write(enc.tobytes())
