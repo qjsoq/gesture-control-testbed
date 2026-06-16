@@ -10,16 +10,16 @@ logger = logging.getLogger(__name__)
 
 STEPS = 3
 INTER_STEP_SLEEP = 0.05
-HOLD_SLEEP = 1.0
 
 
 class ThumbsUpCommand(Command):
-    """Реакція на мітку `like`: один нод (вгору STEPS кроків, пауза, вниз STEPS),
-    далі привід ТРИМАЄТЬСЯ поки `like` лишається в кадрі.
+    """Реакція на мітку `like`: нахилити вертикальний привід ВНИЗ на STEPS кроків
+    і ТРИМАТИ це положення поки `like` лишається в кадрі.
 
     Edge-trigger через спільний `VerticalNodState`: поки `engaged=True` повторні
-    кадри з `like` нічого не роблять. Прапорець скидає `ReturnNeutralCommand`
-    коли `like` зникає (мітка `no_gesture`), тож наступна поява знову нодне.
+    кадри з `like` нічого не роблять (привід стоїть нахилений). Прапорець скидає
+    `ReturnNeutralCommand` коли `like` зникає (мітка `no_gesture`) — привід
+    повертається в нейтраль, а наступна поява `like` знову нахилить вниз.
 
     Використовує лише вертикальний привід (Д4: `_v`) та крокову 5°-API.
     """
@@ -30,15 +30,9 @@ class ThumbsUpCommand(Command):
 
     def execute(self, ctx: CommandContext) -> None:
         if self._state.engaged:
-            return  # нод уже зроблено — тримаємось, поки `like` у кадрі
+            return  # уже нахилено вниз — тримаємось, поки `like` у кадрі
 
-        logger.info("thumbs_up: nod up %d steps", STEPS)
-        for _ in range(STEPS):
-            self._v.move_vertical("up")
-            self._state.offset += 1
-            time.sleep(INTER_STEP_SLEEP)
-        time.sleep(HOLD_SLEEP)
-        logger.info("thumbs_up: nod down %d steps", STEPS)
+        logger.info("thumbs_up: tilting down %d steps and holding", STEPS)
         for _ in range(STEPS):
             self._v.move_vertical("down")
             self._state.offset -= 1
