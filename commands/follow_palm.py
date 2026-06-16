@@ -13,8 +13,10 @@ logger = logging.getLogger(__name__)
 
 LEFT_THRESHOLD = 0.33
 RIGHT_THRESHOLD = 0.67
-TOP_THRESHOLD = 0.33
-BOTTOM_THRESHOLD = 0.67
+# Вужча мертва зона по вертикалі => чутливіше до нахилів угору/вниз:
+# навіть невеликий зсув руки від центру дає крок up/down.
+TOP_THRESHOLD = 0.45
+BOTTOM_THRESHOLD = 0.55
 
 
 class FollowPalmCommand(Command):
