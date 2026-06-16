@@ -392,6 +392,10 @@ class Main:
                 draw_detections(img, pred.raw.get("detections", []))
                 draw_hand_center(img, pred.hand_x, pred.hand_y)
                 self.dispatcher.handle(pred.label, pred.hand_x, pred.hand_y)
+            else:
+                # Нічого не виявлено -> явна мітка `no_gesture`, щоб команди
+                # могли зреагувати на ЗНИКНЕННЯ жесту (напр. повернення в нейтраль).
+                self.dispatcher.handle("no_gesture", None, None)
             draw_hud(img, fps, inf_ms, self.dispatcher.is_busy)
 
             ok, enc = cv2.imencode(

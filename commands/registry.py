@@ -2,7 +2,8 @@ from __future__ import annotations
 
 from commands.base import Command, HorizontalServoLike, VerticalServoLike
 from commands.follow_palm import FollowPalmCommand
-from commands.noop import NoOpCommand
+from commands.nod_state import VerticalNodState
+from commands.return_neutral import ReturnNeutralCommand
 from commands.thumbs_up import ThumbsUpCommand
 
 
@@ -17,10 +18,13 @@ class CommandRegistry:
     def build_default_registry(
         v_servo: VerticalServoLike, h_servo: HorizontalServoLike
     ) -> dict[str, Command]:
+        # Спільний стан ноду: `like` нодне раз і тримає, `no_gesture` повертає
+        # в нейтраль і знову озброює (re-arm).
+        nod_state = VerticalNodState()
         return {
             "palm": FollowPalmCommand(v_servo, h_servo),
-            "like": ThumbsUpCommand(v_servo),
-            "no_gesture": NoOpCommand(),
+            "like": ThumbsUpCommand(v_servo, nod_state),
+            "no_gesture": ReturnNeutralCommand(v_servo, nod_state),
         }
 
 
