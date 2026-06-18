@@ -1,23 +1,3 @@
-"""Єдина точка входу (Д4: клас `Main`).
-
-`Main` залежить лише від абстракцій та фабрик (DIP):
-
-    RecognizerFactory  -> GestureRecognizer
-    ServoFactory       -> VerticalServoLike / HorizontalServoLike
-    CommandRegistry    -> dict[str, Command]
-    GestureSource      -> LocalRecognizerSource | TcpLabelSource
-
-Три режими, обрані через YAML-поле `mode` (або `--mode`):
-
-  stream  Pi-камера (rpicam-vid) -> ONNX -> диспетчер -> сервоприводи,
-          анотований MJPEG на :8000 (capture_loop + інференс-цикл).
-  local   веб-камера -> LocalRecognizerSource -> диспетчер -> сервоприводи.
-  tcp     PC шле мітки по TCP -> TcpLabelSource -> диспетчер -> сервоприводи.
-
-Запуск:
-    PYTHONPATH=. python3 main.py --config gesture_control/config_onnx_stream.yaml
-    NO_SERVOS=1 PYTHONPATH=. python3 main.py --config ...   # без заліза
-"""
 from __future__ import annotations
 
 import argparse
@@ -68,9 +48,6 @@ BUSY_COLOR = (0, 0, 255)
 HUD_COLOR = (0, 255, 255)
 
 
-# --------------------------------------------------------------------------- #
-# Конфігурація
-# --------------------------------------------------------------------------- #
 class CameraConfig(BaseModel):
     width: int = 640
     height: int = 480
@@ -90,9 +67,8 @@ class TcpConfig(BaseModel):
 
 
 class RemoteConfig(BaseModel):
-    """Куди Pi під'єднується для віддаленого інференсу (PC = сервер)."""
 
-    host: str = "127.0.0.1"   # IP комп'ютера з pc_inference_server.py
+    host: str = "127.0.0.1"
     port: int = 15483
 
 
@@ -108,8 +84,6 @@ class MainConfig(BaseModel):
     @model_validator(mode="before")
     @classmethod
     def _resolve_source(cls, raw_data: dict) -> dict:
-        # Як у gesture_control.app.AppConfig: підставити конкретний клас конфіга
-        # відеоджерела за полем `source.type`.
         if isinstance(raw_data, dict) and isinstance(raw_data.get("source"), dict):
             specific_type = raw_data["source"].get("type", "")
             config_class = get_source_config(specific_type)
@@ -124,9 +98,6 @@ def load_config(path: Path) -> MainConfig:
     return MainConfig.model_validate(raw)
 
 
-# --------------------------------------------------------------------------- #
-# MJPEG-інфраструктура (режим stream)
-# --------------------------------------------------------------------------- #
 class StreamingOutput:
     def __init__(self) -> None:
         self.frame: bytes | None = None
@@ -261,9 +232,6 @@ class ThreadingServer(socketserver.ThreadingMixIn, server.HTTPServer):
     daemon_threads = True
 
 
-# --------------------------------------------------------------------------- #
-# Main (Д4)
-# --------------------------------------------------------------------------- #
 class Main:
     """Шар збирання (composition root): будує абстракції через фабрики й
     проганяє обраний режим. Поля типізовані абстракціями, як на креслянику Д2/Д4.
@@ -283,7 +251,6 @@ class Main:
         )
         self.source: GestureSource | None = None
 
-    # --- публічний запуск ------------------------------------------------- #
     def run(self) -> None:
         if self._cfg.mode == "stream":
             self._run_stream()
@@ -293,10 +260,9 @@ class Main:
             self._run_tcp()
         elif self._cfg.mode == "remote":
             self._run_remote()
-        else:  # pragma: no cover — pydantic уже валідує
+        else:  # pragma: no cover
             raise SystemExit(f"unknown mode: {self._cfg.mode}")
 
-    # --- режим stream (Pi-камера АБО відеофайл + MJPEG) ------------------- #
     def _run_stream(self) -> None:
         if self.recognizer is None:
             raise SystemExit("stream mode requires a `recognizer` in the config")
@@ -307,7 +273,6 @@ class Main:
 
         proc: subprocess.Popen | None = None
         if use_file:
-            # Відеофайл як джерело (тест без камери): кадри -> latest -> інференс.
             Thread(
                 target=self._file_capture_loop,
                 args=(cfg.server.jpeg_quality,),
@@ -408,8 +373,6 @@ class Main:
                 draw_hand_center(img, pred.hand_x, pred.hand_y)
                 self.dispatcher.handle(pred.label, pred.hand_x, pred.hand_y)
             else:
-                # Нічого не виявлено -> явна мітка `no_gesture`, щоб команди
-                # могли зреагувати на ЗНИКНЕННЯ жесту (напр. повернення в нейтраль).
                 self.dispatcher.handle("no_gesture", None, None)
             draw_hud(img, fps, inf_ms, self.dispatcher.is_busy)
 
@@ -428,7 +391,6 @@ class Main:
                 processed = 0
                 last_log = now
 
-    # --- режим local (веб-камера через GestureSource) --------------------- #
     def _run_local(self) -> None:
         if self.recognizer is None or self._cfg.source is None:
             raise SystemExit("local mode requires `recognizer` and `source` in the config")
@@ -443,7 +405,6 @@ class Main:
             self.dispatcher.stop()
             logger.info("local source stopped")
 
-    # --- режим tcp (мітки з PC) ------------------------------------------- #
     def _run_tcp(self) -> None:
         self._install_signal_handlers()
         logger.info("tcp label sink on %s:%d", self._cfg.tcp.host, self._cfg.tcp.port)
@@ -459,7 +420,6 @@ class Main:
         finally:
             self.dispatcher.stop()
 
-    # --- режим remote (Pi шле кадри на PC, отримує мітки) ----------------- #
     def _run_remote(self) -> None:
         if self._cfg.source is None:
             raise SystemExit("remote mode requires a `source` in the config")
@@ -482,7 +442,6 @@ class Main:
             self.dispatcher.stop()
             logger.info("remote source stopped")
 
-    # --- спільне -------------------------------------------------------- #
     def _consume(self, source: GestureSource) -> None:
         for ev in source:
             logger.debug("label=%s x=%s y=%s", ev.label, ev.x_norm, ev.y_norm)

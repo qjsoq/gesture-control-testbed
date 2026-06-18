@@ -1,18 +1,15 @@
 version: 1
 mode: remote
 
-# Pi бере кадри з БУДЬ-ЯКОГО джерела (тут — відеофайл; заміни на webcam/камеру
-# без змін коду) і шле їх на PC, який повертає мітки жестів.
 source:
   type: file
   path: /home/pi/video.mp4
   loop: true
-  realtime: false      # темп задає round-trip до PC, не fps файлу
+  realtime: false
 
-# Куди під'єднуватись — IP комп'ютера з pc_inference_server.py.
 remote:
-  host: 192.168.0.103   # <-- ПОСТАВ IP свого ПК у локалці
+  host: 192.168.0.103
   port: 15483
 
 server:
-  jpeg_quality: 75       # якість JPEG для кадрів, що йдуть на PC
+  jpeg_quality: 75

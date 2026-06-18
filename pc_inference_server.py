@@ -1,17 +1,3 @@
-"""PC-сторона віддаленого режиму.
-
-Слухає TCP, приймає JPEG-кадри з Pi (`RemoteInferenceSource`), проганяє
-обраний у YAML розпізнавач (напр. MediaPipe two-stage) і повертає мітку жесту.
-За бажанням віддає анотований MJPEG у браузер (--view-port, типово 8000).
-
-    PC:  python pc_inference_server.py --config gesture_control/config_mediapipe_server.yaml --port 15483
-    Pi:  PYTHONPATH=. python3 main.py --config gesture_control/config_remote_pi.yaml
-    Браузер: http://localhost:8000/
-
-Протокол (симетричний із `gesture_source.RemoteInferenceSource`):
-    Pi -> PC : b"<jpeg_len>\\n" + <jpeg>
-    PC -> Pi : b"<json_len>\\n" + json{"label","x","y"}
-"""
 from __future__ import annotations
 
 import argparse
@@ -45,9 +31,6 @@ def _load_recognizer(path: Path):
     return RecognizerFactory.build_recognizer(cfg.recognizer)
 
 
-# --------------------------------------------------------------------------- #
-# MJPEG-стрім у браузер (анотовані кадри)
-# --------------------------------------------------------------------------- #
 class _StreamingOutput:
     def __init__(self) -> None:
         self.frame: bytes | None = None
@@ -108,14 +91,13 @@ class _ThreadingServer(socketserver.ThreadingMixIn, http_server.HTTPServer):
     daemon_threads = True
 
 
-# Стандартні зв'язки 21-точкового скелета кисті MediaPipe.
 _HAND_CONNECTIONS = (
-    (0, 1), (1, 2), (2, 3), (3, 4),            # великий палець
-    (0, 5), (5, 6), (6, 7), (7, 8),            # вказівний
-    (5, 9), (9, 10), (10, 11), (11, 12),       # середній
-    (9, 13), (13, 14), (14, 15), (15, 16),     # безіменний
-    (13, 17), (17, 18), (18, 19), (19, 20),    # мізинець
-    (0, 17),                                   # основа долоні
+    (0, 1), (1, 2), (2, 3), (3, 4),            
+    (0, 5), (5, 6), (6, 7), (7, 8),            
+    (5, 9), (9, 10), (10, 11), (11, 12),       
+    (9, 13), (13, 14), (14, 15), (15, 16),     
+    (13, 17), (17, 18), (18, 19), (19, 20),    
+    (0, 17),                                   
 )
 
 
@@ -149,9 +131,6 @@ def _annotate(
         )
 
 
-# --------------------------------------------------------------------------- #
-# TCP-приймач кадрів
-# --------------------------------------------------------------------------- #
 def _recv_frame(conn: socket.socket, buffer: bytes) -> tuple[bytes | None, bytes]:
     while b"\n" not in buffer:
         chunk = conn.recv(65536)
